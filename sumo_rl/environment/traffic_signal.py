@@ -55,6 +55,7 @@ class TrafficSignal:
         begin_time: int,
         reward_fn: Union[str, Callable],
         sumo,
+        is_phase_green: Callable = None,
     ):
         """Initializes a TrafficSignal object.
 
@@ -68,6 +69,7 @@ class TrafficSignal:
             begin_time (int): The time in seconds when the traffic signal starts operating.
             reward_fn (Union[str, Callable]): The reward function. Can be a string with the name of the reward function or a callable function.
             sumo (Sumo): The Sumo instance.
+            is_phase_green (Callable): The green phase recognition function. Takes as input Phase and return whether it "green" or not.
         """
         self.id = ts_id
         self.env = env
@@ -91,12 +93,17 @@ class TrafficSignal:
                 raise NotImplementedError(f"Reward function {self.reward_fn} not implemented")
 
         self.observation_fn = self.env.observation_class(self)
+        if is_phase_green is not None:
+            self.is_phase_green = is_phase_green
+
+        else:
+            self.is_phase_green = lambda phase: ("g" in phase.state or "G" in phase.state) and ("y" not in phase.state)
 
         self._build_phases()
-
         self.lanes = list(
             dict.fromkeys(self.sumo.trafficlight.getControlledLanes(self.id))
         )  # Remove duplicates and keep order
+
         self.out_lanes = [link[0][1] for link in self.sumo.trafficlight.getControlledLinks(self.id) if link]
         self.out_lanes = list(set(self.out_lanes))
         self.lanes_lenght = {lane: self.sumo.lane.getLength(lane) for lane in self.lanes + self.out_lanes}
@@ -105,19 +112,23 @@ class TrafficSignal:
         self.action_space = spaces.Discrete(self.num_green_phases)
 
     def _build_phases(self):
-        phases = self.sumo.trafficlight.getAllProgramLogics(self.id)[0].phases
-        if self.env.fixed_ts:
-            self.num_green_phases = len(phases) // 2  # Number of green phases == number of phases (green+yellow) divided by 2
-            return
+        logic_id = self.sumo.trafficlight.getProgram(self.id)
+        logic = [l for l in self.sumo.trafficlight.getAllProgramLogics(self.id) if l.programID == logic_id][0]
 
+        phases = logic.phases
         self.green_phases = []
-        self.yellow_dict = {}
+
         for phase in phases:
             state = phase.state
-            if "y" not in state and (state.count("r") + state.count("s") != len(state)):
-                self.green_phases.append(self.sumo.trafficlight.Phase(60, state))
+            if self.is_phase_green(phase):
+                self.green_phases.append(self.sumo.trafficlight.Phase(phase.duration, state))  # maybe phase.min?
+
         self.num_green_phases = len(self.green_phases)
+        if self.env.fixed_ts:
+            return
+
         self.all_phases = self.green_phases.copy()
+        self.yellow_dict = {}
 
         for i, p1 in enumerate(self.green_phases):
             for j, p2 in enumerate(self.green_phases):
@@ -132,9 +143,9 @@ class TrafficSignal:
                 self.yellow_dict[(i, j)] = len(self.all_phases)
                 self.all_phases.append(self.sumo.trafficlight.Phase(self.yellow_time, yellow_state))
 
-        programs = self.sumo.trafficlight.getAllProgramLogics(self.id)
-        logic = programs[0]
-        logic.type = 0
+        # programs = self.sumo.trafficlight.getAllProgramLogics(self.id)
+        # logic = programs[0]
+        # logic.type = 0
         logic.phases = self.all_phases
         self.sumo.trafficlight.setProgramLogic(self.id, logic)
         self.sumo.trafficlight.setRedYellowGreenState(self.id, self.all_phases[0].state)

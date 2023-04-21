@@ -143,10 +143,15 @@ class SumoEnvironment(gym.Env):
         self.sumo = None
 
         if LIBSUMO:
-            traci.start([sumolib.checkBinary("sumo"), "-n", self._net])  # Start only to retrieve traffic light information
+            traci.start(
+                [sumolib.checkBinary("sumo"), "-n", self._net] + self.additional_sumo_cmd.split()
+            )  # Start only to retrieve traffic light information
             conn = traci
         else:
-            traci.start([sumolib.checkBinary("sumo"), "-n", self._net], label="init_connection" + self.label)
+            traci.start(
+                [sumolib.checkBinary("sumo"), "-n", self._net] + self.additional_sumo_cmd.split(),
+                label="init_connection" + self.label,
+            )
             conn = traci.getConnection("init_connection" + self.label)
 
         self.ts_ids = list(conn.trafficlight.getIDList())
