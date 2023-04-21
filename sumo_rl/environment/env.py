@@ -52,7 +52,7 @@ class SumoEnvironment(gym.Env):
         use_gui (bool): Whether to run SUMO simulation with the SUMO GUI
         virtual_display (Optional[Tuple[int,int]]): Resolution of the virtual display for rendering
         begin_time (int): The time step (in seconds) the simulation starts. Default: 0
-        num_seconds (int): Number of simulated seconds on SUMO. The time in seconds the simulation must end. Default: 3600
+        sim_max_time (int): Number of simulated seconds on SUMO. The time in seconds the simulation must end. Default: 3600
         max_depart_delay (int): Vehicles are discarded if they could not be inserted after max_depart_delay seconds. Default: -1 (no delay)
         waiting_time_memory (int): Number of seconds to remember the waiting time of a vehicle (see https://sumo.dlr.de/pydoc/traci._vehicle.html#VehicleDomain-getAccumulatedWaitingTime). Default: 1000
         time_to_teleport (int): Time in seconds to teleport a vehicle to the end of the edge if it is stuck. Default: -1 (no teleport)
@@ -86,7 +86,7 @@ class SumoEnvironment(gym.Env):
         use_gui: bool = False,
         virtual_display: Tuple[int, int] = (3200, 1800),
         begin_time: int = 0,
-        num_seconds: int = 20000,
+        sim_max_time: int = 20000,
         max_depart_delay: int = -1,
         waiting_time_memory: int = 1000,
         time_to_teleport: int = -1,
@@ -122,7 +122,7 @@ class SumoEnvironment(gym.Env):
         assert delta_time > yellow_time, "Time between actions must be at least greater than yellow time."
 
         self.begin_time = begin_time
-        self.sim_max_time = num_seconds
+        self.sim_max_time = sim_max_time
         self.delta_time = delta_time  # seconds on sumo at each step
         self.max_depart_delay = max_depart_delay  # Max wait time to insert a vehicle
         self.waiting_time_memory = waiting_time_memory  # Number of seconds to remember the waiting time of a vehicle (see https://sumo.dlr.de/pydoc/traci._vehicle.html#VehicleDomain-getAccumulatedWaitingTime)
