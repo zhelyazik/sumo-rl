@@ -104,6 +104,7 @@ class SumoEnvironment(gym.Env):
         sumo_warnings: bool = True,
         additional_sumo_cmd: Optional[str] = None,
         render_mode: Optional[str] = None,
+        cyclic_mode: bool = False,
     ) -> None:
         """Initialize the environment."""
         assert render_mode is None or render_mode in self.metadata["render_modes"], "Invalid render mode."
@@ -111,6 +112,7 @@ class SumoEnvironment(gym.Env):
         self.virtual_display = virtual_display
         self.disp = None
 
+        self.cyclic_mode = cyclic_mode
         self._net = net_file
         self._route = route_file
         self.use_gui = use_gui

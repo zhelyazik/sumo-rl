@@ -56,6 +56,7 @@ class TrafficSignal:
         reward_fn: Union[str, Callable],
         sumo,
         is_phase_green: Callable = None,
+        cyclic_mode: bool = False,
     ):
         """Initializes a TrafficSignal object.
 
@@ -70,6 +71,7 @@ class TrafficSignal:
             reward_fn (Union[str, Callable]): The reward function. Can be a string with the name of the reward function or a callable function.
             sumo (Sumo): The Sumo instance.
             is_phase_green (Callable): The green phase recognition function. Takes as input Phase and return whether it "green" or not.
+            cyclic_mode (bool): if True just two actions allowed: switch to next phase or not
         """
         self.id = ts_id
         self.env = env
@@ -110,6 +112,10 @@ class TrafficSignal:
 
         self.observation_space = self.observation_fn.observation_space()
         self.action_space = spaces.Discrete(self.num_green_phases)
+        self.cyclic_mode = env.cyclic_mode
+
+        if self.cyclic_mode:
+            self.action_space = spaces.Discrete(2)
 
     def _build_phases(self):
         logic_id = self.sumo.trafficlight.getProgram(self.id)
@@ -124,8 +130,6 @@ class TrafficSignal:
                 self.green_phases.append(self.sumo.trafficlight.Phase(phase.duration, state))  # maybe phase.min?
 
         self.num_green_phases = len(self.green_phases)
-        if self.env.fixed_ts:
-            return
 
         self.all_phases = self.green_phases.copy()
         self.yellow_dict = {}
@@ -143,10 +147,11 @@ class TrafficSignal:
                 self.yellow_dict[(i, j)] = len(self.all_phases)
                 self.all_phases.append(self.sumo.trafficlight.Phase(self.yellow_time, yellow_state))
 
-        # programs = self.sumo.trafficlight.getAllProgramLogics(self.id)
-        # logic = programs[0]
-        # logic.type = 0
+        if self.env.fixed_ts:
+            return
+
         logic.phases = self.all_phases
+
         self.sumo.trafficlight.setProgramLogic(self.id, logic)
         self.sumo.trafficlight.setRedYellowGreenState(self.id, self.all_phases[0].state)
 
@@ -173,6 +178,14 @@ class TrafficSignal:
             new_phase (int): Number between [0 ... num_green_phases]
         """
         new_phase = int(new_phase)
+        if self.cyclic_mode:
+            new_phase += self.green_phase
+            new_phase = new_phase % len(self.green_phases)
+
+        if (new_phase == self.green_phase) and (self.time_since_last_phase_change - self.yellow_time > self.max_green):
+            new_phase += 1
+            new_phase = new_phase % len(self.green_phases)
+
         if self.green_phase == new_phase or self.time_since_last_phase_change < self.yellow_time + self.min_green:
             # self.sumo.trafficlight.setPhase(self.id, self.green_phase)
             self.sumo.trafficlight.setRedYellowGreenState(self.id, self.all_phases[self.green_phase].state)
