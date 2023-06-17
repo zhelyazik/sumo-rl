@@ -80,8 +80,9 @@ class SumoEnvironment(gym.Env):
 
     def __init__(
         self,
-        net_file: str,
-        route_file: str,
+        net_file: str = '',
+        route_file: str = '',
+        config_file: str = '',
         out_csv_name: Optional[str] = None,
         use_gui: bool = False,
         virtual_display: Tuple[int, int] = (3200, 1800),
@@ -102,11 +103,12 @@ class SumoEnvironment(gym.Env):
         sumo_seed: Union[str, int] = "random",
         fixed_ts: bool = False,
         sumo_warnings: bool = True,
-        additional_sumo_cmd: Optional[str] = None,
+        additional_sumo_cmd: Optional[str] = '',
         render_mode: Optional[str] = None,
         cyclic_mode: bool = False,
     ) -> None:
         """Initialize the environment."""
+        assert net_file or config_file, "No configuration for simulation"
         assert render_mode is None or render_mode in self.metadata["render_modes"], "Invalid render mode."
         self.render_mode = render_mode
         self.virtual_display = virtual_display
@@ -115,6 +117,7 @@ class SumoEnvironment(gym.Env):
         self.cyclic_mode = cyclic_mode
         self._net = net_file
         self._route = route_file
+        self._config = config_file
         self.use_gui = use_gui
         if self.use_gui or self.render_mode is not None:
             self._sumo_binary = sumolib.checkBinary("sumo-gui")
@@ -145,15 +148,26 @@ class SumoEnvironment(gym.Env):
         self.sumo = None
 
         if LIBSUMO:
-            traci.start(
-                [sumolib.checkBinary("sumo"), "-n", self._net] + self.additional_sumo_cmd.split()
-            )  # Start only to retrieve traffic light information
+            if self._net:
+                traci.start(
+                    [sumolib.checkBinary("sumo"), "-n", self._net] + self.additional_sumo_cmd.split()
+                )  # Start only to retrieve traffic light information
+            else: 
+                traci.start(
+                    [sumolib.checkBinary("sumo"), "-c", self._config] + self.additional_sumo_cmd.split()
+                )
             conn = traci
         else:
-            traci.start(
-                [sumolib.checkBinary("sumo"), "-n", self._net] + self.additional_sumo_cmd.split(),
-                label="init_connection" + self.label,
-            )
+            if self._net:
+                traci.start(
+                    [sumolib.checkBinary("sumo"), "-n", self._net] + self.additional_sumo_cmd.split(),
+                    label="init_connection" + self.label,
+                )
+            else:
+                traci.start(
+                    [sumolib.checkBinary("sumo"), "-c", self._config] + self.additional_sumo_cmd.split(),
+                    label="init_connection" + self.label,
+                )
             conn = traci.getConnection("init_connection" + self.label)
 
         self.ts_ids = list(conn.trafficlight.getIDList())
@@ -203,10 +217,6 @@ class SumoEnvironment(gym.Env):
     def _start_simulation(self):
         sumo_cmd = [
             self._sumo_binary,
-            "-n",
-            self._net,
-            "-r",
-            self._route,
             "--max-depart-delay",
             str(self.max_depart_delay),
             "--waiting-time-memory",
@@ -214,6 +224,14 @@ class SumoEnvironment(gym.Env):
             "--time-to-teleport",
             str(self.time_to_teleport),
         ]
+
+        if self._config:
+            sumo_cmd = sumo_cmd + ["-c", self._config]
+        else:
+            sumo_cmd = sumo_cmd + ["-n",
+            self._net,
+            "-r",
+            self._route,]
         if self.begin_time > 0:
             sumo_cmd.append(f"-b {self.begin_time}")
         if self.sumo_seed == "random":
